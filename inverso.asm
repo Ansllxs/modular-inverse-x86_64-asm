@@ -47,6 +47,8 @@ section .bss
 ; ------------------------------------------------------------
 section .text
     global main             ; 'main' es el punto de entrada (lo usa gcc)
+    extern printf           ; funcion de C para imprimir en consola
+    extern scanf            ; funcion de C para leer del teclado
 
 ; ============================================================
 ; main: ordena todo el programa.
@@ -111,3 +113,39 @@ main_fin:
     mov     rax, 0          ; codigo de salida 0 (todo bien)
     leave                   ; deshacer el stack frame (rsp = rbp; pop rbp)
     ret                     ; terminar el programa
+
+
+; ============================================================
+; leerDatos: muestra los mensajes y lee a y p del usuario.
+; Parametros (recibidos por la pila):
+;   [rbp+24] = direccion donde guardar a
+;   [rbp+16] = direccion donde guardar p
+; No devuelve nada: escribe los numeros en esas direcciones.
+; ============================================================
+leerDatos:
+    push    rbp
+    mov     rbp, rsp
+    and     rsp, -16        ; alinear la pila a 16 bytes (lo exigen printf/scanf)
+
+    ; --- pedir y leer a ---
+    lea     rdi, [msg_pedir_a]  ; 1er argumento de printf: el mensaje
+    xor     rax, rax            ; rax = 0 (printf lo requiere por los varargs)
+    call    printf
+
+    lea     rdi, [formato_num]  ; 1er argumento de scanf: "%ld"
+    mov     rsi, [rbp+24]       ; 2do argumento: la direccion de a
+    xor     rax, rax
+    call    scanf
+
+    ; --- pedir y leer p ---
+    lea     rdi, [msg_pedir_p]
+    xor     rax, rax
+    call    printf
+
+    lea     rdi, [formato_num]
+    mov     rsi, [rbp+16]       ; la direccion de p
+    xor     rax, rax
+    call    scanf
+
+    leave
+    ret
