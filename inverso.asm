@@ -11,7 +11,6 @@
 ; SECCION .data
 ; Aqui van los datos que YA tienen un valor desde el inicio,
 ; por ejemplo los mensajes de texto que se muestran al usuario.
-; (Paso 2: aqui escribiremos los mensajes)
 ; ------------------------------------------------------------
 section .data
     ; Mensajes que se le muestran al usuario.
@@ -36,6 +35,12 @@ section .data
 ; (Paso 3: aqui reservaremos el espacio)
 ; ------------------------------------------------------------
 section .bss
+    ; 'resq 1' reserva espacio para 1 numero entero de 64 bits
+    ; (8 bytes). Aqui guardaremos los valores mientras corre el programa.
+
+    a:          resq 1      ; el numero del que buscamos el inverso
+    p:          resq 1      ; el modulo
+    resultado:  resq 1      ; donde quedara el inverso calculado
 
 
 ; ------------------------------------------------------------
