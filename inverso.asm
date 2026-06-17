@@ -14,6 +14,18 @@
 ; (Paso 2: aqui escribiremos los mensajes)
 ; ------------------------------------------------------------
 section .data
+    ; Mensajes que se le muestran al usuario.
+    ; 'db' = "define byte": guarda texto byte por byte.
+    ; El 0 del final es OBLIGATORIO: marca el fin del texto (lo
+    ; necesitan printf y scanf de C para saber donde termina).
+    ; El numero 10 es el salto de linea (tecla Enter).
+
+    msg_pedir_a:    db  "Ingrese el numero a: ", 0
+    msg_pedir_p:    db  "Ingrese el modulo p: ", 0
+    msg_resultado:  db  "El inverso de a modulo p es: %ld", 10, 0
+
+    ; Formato para leer un numero entero con scanf (%ld = entero largo).
+    formato_num:    db  "%ld", 0
 
 
 ; ------------------------------------------------------------
