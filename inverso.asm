@@ -32,28 +32,82 @@ section .data
 ; Aqui se RESERVA espacio en memoria para variables que todavia
 ; no tienen valor (se llenan mientras corre el programa),
 ; por ejemplo los numeros 'a' y 'p' que escribe el usuario.
-; (Paso 3: aqui reservaremos el espacio)
 ; ------------------------------------------------------------
 section .bss
-    ; 'resq 1' reserva espacio para 1 numero entero de 64 bits
-    ; (8 bytes). Aqui guardaremos los valores mientras corre el programa.
-
-    a:          resq 1      ; el numero del que buscamos el inverso
-    p:          resq 1      ; el modulo
-    resultado:  resq 1      ; donde quedara el inverso calculado
+    ; A proposito esta VACIA.
+    ; La regla del proyecto prohibe variables globales: los numeros
+    ; a, p y el resultado se guardan como variables LOCALES dentro del
+    ; stack frame de cada modulo, y se comunican por la pila.
 
 
 ; ------------------------------------------------------------
 ; SECCION .text
 ; Aqui va el CODIGO: las instrucciones que ejecuta el programa.
 ; Cada modulo (funcion) vivira en esta seccion.
-; (Pasos 4 en adelante: aqui escribiremos los modulos)
 ; ------------------------------------------------------------
 section .text
     global main             ; 'main' es el punto de entrada (lo usa gcc)
 
+; ============================================================
+; main: ordena todo el programa.
+;   1. leer a y p
+;   2. calcular el inverso (modulo de Julio)
+;   3. si no existe inverso -> mensaje de error
+;      si existe -> dejarlo positivo e imprimirlo
+;
+; Variables LOCALES (dentro del stack frame de main):
+;   [rbp-8]  = a          [rbp-32] = mcd  (para saber si hay inverso)
+;   [rbp-16] = p          [rbp-40] = resultado (inverso ya positivo)
+;   [rbp-24] = x          (inverso "crudo", puede salir negativo)
+; ============================================================
 main:
-    ; Por ahora 'main' esta vacio: solo termina el programa.
-    ; En el Paso 4 le pondremos su stack frame y la logica.
+    push    rbp             ; guardar el rbp del que nos llamo
+    mov     rbp, rsp        ; rbp marca el inicio de NUESTRO stack frame
+    sub     rsp, 48         ; reservar espacio para las variables locales
+
+    ; (1) Leer a y p. Le pasamos a leerDatos las DIRECCIONES
+    ;     donde queremos que guarde cada numero (por la pila).
+    lea     rax, [rbp-8]    ; direccion de a
+    push    rax
+    lea     rax, [rbp-16]   ; direccion de p
+    push    rax
+    call    leerDatos
+    add     rsp, 16         ; sacar los 2 parametros de la pila
+
+    ; (2) Calcular el inverso (lo hace el modulo de Julio).
+    ;     Le pasamos a y p (valores) y las direcciones de x y mcd.
+    push    qword [rbp-8]   ; a
+    push    qword [rbp-16]  ; p
+    lea     rax, [rbp-24]   ; direccion de x
+    push    rax
+    lea     rax, [rbp-32]   ; direccion de mcd
+    push    rax
+    call    inversoModular
+    add     rsp, 32
+
+    ; (3) Solo existe inverso si mcd(a, p) == 1
+    mov     rax, [rbp-32]   ; traer mcd
+    cmp     rax, 1
+    jne     main_no_existe  ; si mcd != 1, no hay inverso
+
+    ; (4) Dejar el resultado positivo: resultado = x mod p (positivo)
+    push    qword [rbp-24]  ; x
+    push    qword [rbp-16]  ; p
+    lea     rax, [rbp-40]   ; direccion de resultado
+    push    rax
+    call    ajustarPositivo
+    add     rsp, 24
+
+    ; (5) Mostrar el resultado.
+    push    qword [rbp-40]  ; el inverso ya positivo
+    call    imprimirResultado
+    add     rsp, 8
+    jmp     main_fin
+
+main_no_existe:
+    call    imprimirError   ; "El numero no tiene inverso..."
+
+main_fin:
     mov     rax, 0          ; codigo de salida 0 (todo bien)
-    ret                     ; regresar (terminar el programa)
+    leave                   ; deshacer el stack frame (rsp = rbp; pop rbp)
+    ret                     ; terminar el programa
