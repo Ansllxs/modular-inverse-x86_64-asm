@@ -1,0 +1,11 @@
+# Archivos objeto generados por NASM
+*.o
+
+# Ejecutables
+inverso
+*.out
+a.out
+
+# Archivos temporales del editor
+*~
+*.swp
