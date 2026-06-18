@@ -149,3 +149,22 @@ leerDatos:
 
     leave
     ret
+
+
+; ============================================================
+; imprimirResultado: muestra "El inverso de a modulo p es: <n>".
+; Parametro (recibido por la pila):
+;   [rbp+16] = el valor del inverso (ya positivo)
+; ============================================================
+imprimirResultado:
+    push    rbp
+    mov     rbp, rsp
+    and     rsp, -16            ; alinear la pila a 16 bytes (lo exige printf)
+
+    lea     rdi, [msg_resultado] ; 1er argumento: el texto con %ld
+    mov     rsi, [rbp+16]        ; 2do argumento: el numero que reemplaza a %ld
+    xor     rax, rax
+    call    printf
+
+    leave
+    ret
