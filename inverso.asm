@@ -168,3 +168,34 @@ imprimirResultado:
 
     leave
     ret
+
+
+; ============================================================
+; ajustarPositivo: el inverso "crudo" (x) puede salir negativo;
+; esta funcion lo deja en el rango 0..p-1 calculando x mod p y,
+; si queda negativo, sumandole p.
+; Parametros (recibidos por la pila):
+;   [rbp+32] = x  (el inverso crudo)
+;   [rbp+24] = p  (el modulo)
+;   [rbp+16] = direccion donde guardar el resultado positivo
+; ============================================================
+ajustarPositivo:
+    push    rbp
+    mov     rbp, rsp
+
+    mov     rax, [rbp+32]       ; rax = x
+    cqo                         ; extiende el signo de rax a rdx:rax (para dividir con signo)
+    idiv    qword [rbp+24]      ; divide entre p -> cociente en rax, RESTO en rdx
+                                ; rdx = x mod p (puede ser negativo)
+    mov     rcx, rdx            ; rcx = resto
+
+    cmp     rcx, 0              ; el resto es negativo?
+    jge     ajustarPositivo_ok  ; si es >= 0, ya esta bien
+    add     rcx, [rbp+24]       ; si era negativo, le sumamos p para volverlo positivo
+
+ajustarPositivo_ok:
+    mov     rax, [rbp+16]       ; rax = direccion del resultado
+    mov     [rax], rcx          ; guardar el resultado positivo ahi
+
+    leave
+    ret
