@@ -199,3 +199,87 @@ ajustarPositivo_ok:
 
     leave
     ret
+
+
+; ############################################################
+; ###  PARTE 2 - Julio Cesar Quiros Vargas                 ###
+; ###  (modulos del calculo - actualmente VACIOS)          ###
+; ###  Cada modulo debe usar su propio stack frame y        ###
+; ###  comunicarse SOLO por la pila (sin variables          ###
+; ###  globales ni paso de valores por registros).          ###
+; ############################################################
+
+
+; ============================================================
+; validarDatos: revisa que los datos de entrada sean validos
+; antes de calcular (por ejemplo, que p sea positivo y que a
+; no sea multiplo de p).
+; Contrato sugerido (parametros recibidos por la pila):
+;   [rbp+24] = a
+;   [rbp+16] = p
+;   (definir como devolver "valido / no valido", p.ej. por la
+;    direccion de una variable que reciba como parametro)
+; ============================================================
+validarDatos:
+    push    rbp
+    mov     rbp, rsp
+
+    ; TODO Julio: implementar la validacion de los datos.
+
+    leave
+    ret
+
+
+; ============================================================
+; euclidesExtendido: algoritmo extendido de Euclides.
+; Encuentra x, y, mcd tales que a*x + p*y = mcd(a, p).
+; Es el nucleo del calculo (ver Ilustracion 1 del enunciado).
+; Contrato sugerido (parametros recibidos por la pila):
+;   recibir a y p, y las direcciones donde escribir mcd, x (y y).
+; ============================================================
+euclidesExtendido:
+    push    rbp
+    mov     rbp, rsp
+
+    ; TODO Julio: implementar el algoritmo extendido de Euclides.
+
+    leave
+    ret
+
+
+; ============================================================
+; inversoModular: calcula el inverso multiplicativo de a mod p.
+; Usa euclidesExtendido; si mcd(a, p) != 1, no existe inverso.
+; Parametros (recibidos por la pila, los pasa main):
+;   [rbp+40] = a
+;   [rbp+32] = p
+;   [rbp+24] = direccion donde escribir x (el inverso "crudo")
+;   [rbp+16] = direccion donde escribir mcd (main lo usa para
+;              saber si el inverso existe: existe solo si mcd==1)
+; ============================================================
+inversoModular:
+    push    rbp
+    mov     rbp, rsp
+
+    ; TODO Julio: llamar a euclidesExtendido y escribir x y mcd
+    ;             en las direcciones recibidas.
+
+    leave
+    ret
+
+
+; ============================================================
+; imprimirError: muestra "El numero no tiene inverso
+; multiplicativo modular". No recibe parametros.
+; (Necesita declarar su mensaje en la seccion .data y llamar a
+;  printf, igual que imprimirResultado; recordar 'and rsp,-16'.)
+; ============================================================
+imprimirError:
+    push    rbp
+    mov     rbp, rsp
+    and     rsp, -16
+
+    ; TODO Julio: imprimir el mensaje de error con printf.
+
+    leave
+    ret
