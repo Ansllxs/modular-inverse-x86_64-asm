@@ -1,285 +1,463 @@
 ; ============================================================
 ; Proyecto 1 - Inverso Multiplicativo Modular
-; IC3101 Arquitectura de Computadoras - Grupo 3
-; Integrantes:
-;   - Angie Mariela Alpizar Porras
-;   - Julio Cesar Quiros Vargas
-; Ensamblador: NASM (sintaxis Intel) - x86_64
-; ============================================================
-
-; ------------------------------------------------------------
-; SECCION .data
-; Aqui van los datos que YA tienen un valor desde el inicio,
-; por ejemplo los mensajes de texto que se muestran al usuario.
-; ------------------------------------------------------------
-section .data
-    ; Mensajes que se le muestran al usuario.
-    ; 'db' = "define byte": guarda texto byte por byte.
-    ; El 0 del final es OBLIGATORIO: marca el fin del texto (lo
-    ; necesitan printf y scanf de C para saber donde termina).
-    ; El numero 10 es el salto de linea (tecla Enter).
-
-    msg_pedir_a:    db  "Ingrese el numero a: ", 0
-    msg_pedir_p:    db  "Ingrese el modulo p: ", 0
-    msg_resultado:  db  "El inverso de a modulo p es: %ld", 10, 0
-
-    ; Formato para leer un numero entero con scanf (%ld = entero largo).
-    formato_num:    db  "%ld", 0
-
-
-; ------------------------------------------------------------
-; SECCION .bss
-; Aqui se RESERVA espacio en memoria para variables que todavia
-; no tienen valor (se llenan mientras corre el programa),
-; por ejemplo los numeros 'a' y 'p' que escribe el usuario.
-; ------------------------------------------------------------
-section .bss
-    ; A proposito esta VACIA.
-    ; La regla del proyecto prohibe variables globales: los numeros
-    ; a, p y el resultado se guardan como variables LOCALES dentro del
-    ; stack frame de cada modulo, y se comunican por la pila.
-
-
-; ------------------------------------------------------------
-; SECCION .text
-; Aqui va el CODIGO: las instrucciones que ejecuta el programa.
-; Cada modulo (funcion) vivira en esta seccion.
-; ------------------------------------------------------------
-section .text
-    global main             ; 'main' es el punto de entrada (lo usa gcc)
-    extern printf           ; funcion de C para imprimir en consola
-    extern scanf            ; funcion de C para leer del teclado
-
-; ============================================================
-; main: ordena todo el programa.
-;   1. leer a y p
-;   2. calcular el inverso (modulo de Julio)
-;   3. si no existe inverso -> mensaje de error
-;      si existe -> dejarlo positivo e imprimirlo
+; Arquitectura de Computadoras
 ;
-; Variables LOCALES (dentro del stack frame de main):
-;   [rbp-8]  = a          [rbp-32] = mcd  (para saber si hay inverso)
-;   [rbp-16] = p          [rbp-40] = resultado (inverso ya positivo)
-;   [rbp-24] = x          (inverso "crudo", puede salir negativo)
+; Programa en ensamblador x86-64 usando MASM en Visual Studio.
+; El programa lee dos enteros a y p, y calcula el inverso
+; multiplicativo modular de a modulo p, si existe.
+;
+; El calculo se hace con el algoritmo extendido de Euclides.
+; Los datos se pasan entre procedimientos usando la pila.
+;
+;Integrantes del proyecto:
+; Julio Quirós Vargas
+; Fabiola González Gómez
+; Angie Alpizar Porras
+; Jose Gabriel Marin Aguilar
 ; ============================================================
-main:
-    push    rbp             ; guardar el rbp del que nos llamo
-    mov     rbp, rsp        ; rbp marca el inicio de NUESTRO stack frame
-    sub     rsp, 48         ; reservar espacio para las variables locales
 
-    ; (1) Leer a y p. Le pasamos a leerDatos las DIRECCIONES
-    ;     donde queremos que guarde cada numero (por la pila).
-    lea     rax, [rbp-8]    ; direccion de a
-    push    rax
-    lea     rax, [rbp-16]   ; direccion de p
-    push    rax
-    call    leerDatos
-    add     rsp, 16         ; sacar los 2 parametros de la pila
+option casemap:none
 
-    ; (2) Calcular el inverso (lo hace el modulo de Julio).
-    ;     Le pasamos a y p (valores) y las direcciones de x y mcd.
-    push    qword [rbp-8]   ; a
-    push    qword [rbp-16]  ; p
-    lea     rax, [rbp-24]   ; direccion de x
-    push    rax
-    lea     rax, [rbp-32]   ; direccion de mcd
-    push    rax
-    call    inversoModular
-    add     rsp, 32
+includelib ucrt.lib
+includelib vcruntime.lib
+includelib legacy_stdio_definitions.lib
 
-    ; (3) Solo existe inverso si mcd(a, p) == 1
-    mov     rax, [rbp-32]   ; traer mcd
-    cmp     rax, 1
-    jne     main_no_existe  ; si mcd != 1, no hay inverso
+EXTERN printf:PROC
+EXTERN scanf:PROC
 
-    ; (4) Dejar el resultado positivo: resultado = x mod p (positivo)
-    push    qword [rbp-24]  ; x
-    push    qword [rbp-16]  ; p
-    lea     rax, [rbp-40]   ; direccion de resultado
-    push    rax
-    call    ajustarPositivo
-    add     rsp, 24
+PUBLIC main
 
-    ; (5) Mostrar el resultado.
-    push    qword [rbp-40]  ; el inverso ya positivo
-    call    imprimirResultado
-    add     rsp, 8
-    jmp     main_fin
+.data
+msg_pedir_a    db "Ingrese el numero a: ", 0
+msg_pedir_p    db "Ingrese el modulo p: ", 0
+formato_num    db "%lld", 0
+
+msg_resultado  db "El inverso de %lld modulo %lld es: %lld", 13, 10, 0
+msg_error      db "El numero no tiene inverso multiplicativo modular", 13, 10, 0
+
+; ============================================================
+; PARTE 1: Entrada, salida y control general
+; Incluye:
+;   main
+;   leerDatos
+;   imprimirResultado
+;   imprimirError
+;   ajustarPositivo
+; ============================================================
+
+; -------------------------------------------------------------
+; main
+; Variables locales:
+;   [rbp-8]  = a
+;   [rbp-16] = p
+;   [rbp-24] = x
+;   [rbp-32] = mcd
+;   [rbp-40] = resultado positivo
+; -------------------------------------------------------------
+.code
+main PROC
+    push rbp
+    mov rbp, rsp
+    sub rsp, 80
+
+    ;leerDatos(&a, &p)
+    lea rax, [rbp-8]
+    push rax
+    lea rax, [rbp-16]
+    push rax
+    call leerDatos
+    add rsp, 16
+
+    ;inversoModular(a, p, &x, &mcd)
+    push QWORD PTR [rbp-8]
+    push QWORD PTR [rbp-16]
+    lea rax, [rbp-24]
+    push rax
+    lea rax, [rbp-32]
+    push rax
+    call inversoModular
+    add rsp, 32
+
+    ;si mcd != 1, no existe inverso
+    mov rax, QWORD PTR [rbp-32]
+    cmp rax, 1
+    jne main_no_existe
+
+    ;ajustarPositivo(x, p, &resultado)
+    push QWORD PTR [rbp-24]
+    push QWORD PTR [rbp-16]
+    lea rax, [rbp-40]
+    push rax
+    call ajustarPositivo
+    add rsp, 24
+
+    ;imprimirResultado(a, p, resultado)
+    push QWORD PTR [rbp-8]
+    push QWORD PTR [rbp-16]
+    push QWORD PTR [rbp-40]
+    call imprimirResultado
+    add rsp, 24
+
+    jmp main_fin
 
 main_no_existe:
-    call    imprimirError   ; "El numero no tiene inverso..."
+    call imprimirError
 
 main_fin:
-    mov     rax, 0          ; codigo de salida 0 (todo bien)
-    leave                   ; deshacer el stack frame (rsp = rbp; pop rbp)
-    ret                     ; terminar el programa
+    xor eax, eax
+    leave
+    ret
+main ENDP
 
 
-; ============================================================
-; leerDatos: muestra los mensajes y lee a y p del usuario.
-; Parametros (recibidos por la pila):
+; -------------------------------------------------------------
+; leerDatos
+; Parametros por pila:
 ;   [rbp+24] = direccion donde guardar a
 ;   [rbp+16] = direccion donde guardar p
-; No devuelve nada: escribe los numeros en esas direcciones.
-; ============================================================
-leerDatos:
-    push    rbp
-    mov     rbp, rsp
-    and     rsp, -16        ; alinear la pila a 16 bytes (lo exigen printf/scanf)
+; -------------------------------------------------------------
+leerDatos PROC
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
 
-    ; --- pedir y leer a ---
-    lea     rdi, [msg_pedir_a]  ; 1er argumento de printf: el mensaje
-    xor     rax, rax            ; rax = 0 (printf lo requiere por los varargs)
-    call    printf
+    ;printf("Ingrese el numero a: ")
+    mov rcx, OFFSET msg_pedir_a
+    sub rsp, 32
+    call printf
+    add rsp, 32
 
-    lea     rdi, [formato_num]  ; 1er argumento de scanf: "%ld"
-    mov     rsi, [rbp+24]       ; 2do argumento: la direccion de a
-    xor     rax, rax
-    call    scanf
+    ;scanf("%lld", &a)
+    mov rcx, OFFSET formato_num
+    mov rdx, QWORD PTR [rbp+24]
+    sub rsp, 32
+    call scanf
+    add rsp, 32
 
-    ; --- pedir y leer p ---
-    lea     rdi, [msg_pedir_p]
-    xor     rax, rax
-    call    printf
+    ;printf("Ingrese el modulo p: ")
+    mov rcx, OFFSET msg_pedir_p
+    sub rsp, 32
+    call printf
+    add rsp, 32
 
-    lea     rdi, [formato_num]
-    mov     rsi, [rbp+16]       ; la direccion de p
-    xor     rax, rax
-    call    scanf
-
-    leave
-    ret
-
-
-; ============================================================
-; imprimirResultado: muestra "El inverso de a modulo p es: <n>".
-; Parametro (recibido por la pila):
-;   [rbp+16] = el valor del inverso (ya positivo)
-; ============================================================
-imprimirResultado:
-    push    rbp
-    mov     rbp, rsp
-    and     rsp, -16            ; alinear la pila a 16 bytes (lo exige printf)
-
-    lea     rdi, [msg_resultado] ; 1er argumento: el texto con %ld
-    mov     rsi, [rbp+16]        ; 2do argumento: el numero que reemplaza a %ld
-    xor     rax, rax
-    call    printf
+    ;scanf("%lld", &p)
+    mov rcx, OFFSET formato_num
+    mov rdx, QWORD PTR [rbp+16]
+    sub rsp, 32
+    call scanf
+    add rsp, 32
 
     leave
     ret
+leerDatos ENDP
 
 
-; ============================================================
-; ajustarPositivo: el inverso "crudo" (x) puede salir negativo;
-; esta funcion lo deja en el rango 0..p-1 calculando x mod p y,
-; si queda negativo, sumandole p.
-; Parametros (recibidos por la pila):
-;   [rbp+32] = x  (el inverso crudo)
-;   [rbp+24] = p  (el modulo)
-;   [rbp+16] = direccion donde guardar el resultado positivo
-; ============================================================
-ajustarPositivo:
-    push    rbp
-    mov     rbp, rsp
+; -------------------------------------------------------------
+; imprimirResultado
+; Parametros por pila:
+;   [rbp+32] = a
+;   [rbp+24] = p
+;   [rbp+16] = resultado
+; -------------------------------------------------------------
+imprimirResultado PROC
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
 
-    mov     rax, [rbp+32]       ; rax = x
-    cqo                         ; extiende el signo de rax a rdx:rax (para dividir con signo)
-    idiv    qword [rbp+24]      ; divide entre p -> cociente en rax, RESTO en rdx
-                                ; rdx = x mod p (puede ser negativo)
-    mov     rcx, rdx            ; rcx = resto
+    mov rcx, OFFSET msg_resultado
+    mov rdx, QWORD PTR [rbp+32]     ; a
+    mov r8,  QWORD PTR [rbp+24]     ; p
+    mov r9,  QWORD PTR [rbp+16]     ; resultado
 
-    cmp     rcx, 0              ; el resto es negativo?
-    jge     ajustarPositivo_ok  ; si es >= 0, ya esta bien
-    add     rcx, [rbp+24]       ; si era negativo, le sumamos p para volverlo positivo
-
-ajustarPositivo_ok:
-    mov     rax, [rbp+16]       ; rax = direccion del resultado
-    mov     [rax], rcx          ; guardar el resultado positivo ahi
+    sub rsp, 32
+    call printf
+    add rsp, 32
 
     leave
     ret
+imprimirResultado ENDP
 
 
-; ############################################################
-; ###  PARTE 2 - Julio Cesar Quiros Vargas                 ###
-; ###  (modulos del calculo - actualmente VACIOS)          ###
-; ###  Cada modulo debe usar su propio stack frame y        ###
-; ###  comunicarse SOLO por la pila (sin variables          ###
-; ###  globales ni paso de valores por registros).          ###
-; ############################################################
+; -------------------------------------------------------------
+; imprimirError
+; No recibe parametros
+; -------------------------------------------------------------
+imprimirError PROC
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
 
+    mov rcx, OFFSET msg_error
 
-; ============================================================
-; validarDatos: revisa que los datos de entrada sean validos
-; antes de calcular (por ejemplo, que p sea positivo y que a
-; no sea multiplo de p).
-; Contrato sugerido (parametros recibidos por la pila):
-;   [rbp+24] = a
-;   [rbp+16] = p
-;   (definir como devolver "valido / no valido", p.ej. por la
-;    direccion de una variable que reciba como parametro)
-; ============================================================
-validarDatos:
-    push    rbp
-    mov     rbp, rsp
-
-    ; TODO Julio: implementar la validacion de los datos.
+    sub rsp, 32
+    call printf
+    add rsp, 32
 
     leave
     ret
+imprimirError ENDP
 
+; -------------------------------------------------------------
+; ajustarPositivo
+; Parametros por pila:
+;   [rbp+32] = x
+;   [rbp+24] = p
+;   [rbp+16] = direccion donde guardar resultado
+; -------------------------------------------------------------
+ajustarPositivo PROC
+    push rbp
+    mov rbp, rsp
 
-; ============================================================
-; euclidesExtendido: algoritmo extendido de Euclides.
-; Encuentra x, y, mcd tales que a*x + p*y = mcd(a, p).
-; Es el nucleo del calculo (ver Ilustracion 1 del enunciado).
-; Contrato sugerido (parametros recibidos por la pila):
-;   recibir a y p, y las direcciones donde escribir mcd, x (y y).
-; ============================================================
-euclidesExtendido:
-    push    rbp
-    mov     rbp, rsp
+    mov rax, QWORD PTR [rbp+32]
+    cqo
+    idiv QWORD PTR [rbp+24]
 
-    ; TODO Julio: implementar el algoritmo extendido de Euclides.
+    ;rdx tiene x mod p
+    mov rcx, rdx
+
+    cmp rcx, 0
+    jge ajustar_ok
+
+    add rcx, QWORD PTR [rbp+24]
+
+ajustar_ok:
+    mov rax, QWORD PTR [rbp+16]
+    mov QWORD PTR [rax], rcx
 
     leave
     ret
-
+ajustarPositivo ENDP
 
 ; ============================================================
-; inversoModular: calcula el inverso multiplicativo de a mod p.
-; Usa euclidesExtendido; si mcd(a, p) != 1, no existe inverso.
-; Parametros (recibidos por la pila, los pasa main):
+; PARTE 2: Calculo del inverso modular
+; Incluye:
+;   validarDatos
+;   euclidesExtendido
+;   inversoModular
+; ============================================================
+
+; -------------------------------------------------------------
+; validarDatos
+; Parametros por pila:
+;   [rbp+32] = a
+;   [rbp+24] = p
+;   [rbp+16] = direccion donde guardar valido
+;              valido = 1 si se puede calcular
+;              valido = 0 si no
+; -------------------------------------------------------------
+validarDatos PROC
+    push rbp
+    mov rbp, rsp
+
+    ;valido = 0 por defecto
+    mov rax, QWORD PTR [rbp+16]
+    mov QWORD PTR [rax], 0
+
+    ;p debe ser mayor que 1
+    mov rax, QWORD PTR [rbp+24]
+    cmp rax, 1
+    jle validar_fin
+
+    ;si a es multiplo de p, no tiene inverso
+    mov rax, QWORD PTR [rbp+32]
+    cqo
+    idiv QWORD PTR [rbp+24]
+
+    cmp rdx, 0
+    je validar_fin
+
+    ;valido = 1
+    mov rax, QWORD PTR [rbp+16]
+    mov QWORD PTR [rax], 1
+
+validar_fin:
+    leave
+    ret
+validarDatos ENDP
+
+
+; -------------------------------------------------------------
+; euclidesExtendido
+; Calcula x, y y mcd tales que:
+;   a*x + p*y = mcd(a,p)
+;
+; Parametros por pila:
+;   [rbp+48] = a
+;   [rbp+40] = p
+;   [rbp+32] = direccion donde guardar x
+;   [rbp+24] = direccion donde guardar y
+;   [rbp+16] = direccion donde guardar mcd
+;
+; Variables locales:
+;   [rbp-8]  = old_r
+;   [rbp-16] = r
+;   [rbp-24] = old_s
+;   [rbp-32] = s
+;   [rbp-40] = old_t
+;   [rbp-48] = t
+;   [rbp-56] = q
+;   [rbp-64] = residuo
+; -------------------------------------------------------------
+euclidesExtendido PROC
+    push rbp
+    mov rbp, rsp
+    sub rsp, 64
+
+    ;old_r = a
+    mov rax, QWORD PTR [rbp+48]
+    mov QWORD PTR [rbp-8], rax
+
+    ;r = p
+    mov rax, QWORD PTR [rbp+40]
+    mov QWORD PTR [rbp-16], rax
+
+    ;old_s = 1, s = 0
+    mov QWORD PTR [rbp-24], 1
+    mov QWORD PTR [rbp-32], 0
+
+    ;old_t = 0, t = 1
+    mov QWORD PTR [rbp-40], 0
+    mov QWORD PTR [rbp-48], 1
+
+euclides_loop:
+    cmp QWORD PTR [rbp-16], 0
+    je euclides_fin
+
+    ;q = old_r / r
+    ;residuo = old_r mod r
+    mov rax, QWORD PTR [rbp-8]
+    cqo
+    idiv QWORD PTR [rbp-16]
+
+    mov QWORD PTR [rbp-56], rax
+    mov QWORD PTR [rbp-64], rdx
+
+    ;(old_r, r) = (r, residuo)
+    mov rax, QWORD PTR [rbp-16]
+    mov QWORD PTR [rbp-8], rax
+
+    mov rax, QWORD PTR [rbp-64]
+    mov QWORD PTR [rbp-16], rax
+
+    ;nuevo_s = old_s - q*s
+    mov rax, QWORD PTR [rbp-56]
+    imul rax, QWORD PTR [rbp-32]
+
+    mov rcx, QWORD PTR [rbp-24]
+    sub rcx, rax
+
+    ;old_s = s
+    mov rax, QWORD PTR [rbp-32]
+    mov QWORD PTR [rbp-24], rax
+
+    ;s = nuevo_s
+    mov QWORD PTR [rbp-32], rcx
+
+    ;nuevo_t = old_t - q*t
+    mov rax, QWORD PTR [rbp-56]
+    imul rax, QWORD PTR [rbp-48]
+
+    mov rcx, QWORD PTR [rbp-40]
+    sub rcx, rax
+
+    ;old_t = t
+    mov rax, QWORD PTR [rbp-48]
+    mov QWORD PTR [rbp-40], rax
+
+    ;t = nuevo_t
+    mov QWORD PTR [rbp-48], rcx
+
+    jmp euclides_loop
+
+euclides_fin:
+    ;si el mcd sale negativo, se ajusta el signo
+    mov rax, QWORD PTR [rbp-8]
+    cmp rax, 0
+    jge euclides_guardar
+
+    neg rax
+    mov QWORD PTR [rbp-8], rax
+    neg QWORD PTR [rbp-24]
+    neg QWORD PTR [rbp-40]
+
+euclides_guardar:
+    ;guardar mcd
+    mov rax, QWORD PTR [rbp+16]
+    mov rcx, QWORD PTR [rbp-8]
+    mov QWORD PTR [rax], rcx
+
+    ;guardar x
+    mov rax, QWORD PTR [rbp+32]
+    mov rcx, QWORD PTR [rbp-24]
+    mov QWORD PTR [rax], rcx
+
+    ;guardar y
+    mov rax, QWORD PTR [rbp+24]
+    mov rcx, QWORD PTR [rbp-40]
+    mov QWORD PTR [rax], rcx
+
+    leave
+    ret
+euclidesExtendido ENDP
+
+
+; -------------------------------------------------------------
+; inversoModular
+; Parametros por pila:
 ;   [rbp+40] = a
 ;   [rbp+32] = p
-;   [rbp+24] = direccion donde escribir x (el inverso "crudo")
-;   [rbp+16] = direccion donde escribir mcd (main lo usa para
-;              saber si el inverso existe: existe solo si mcd==1)
-; ============================================================
-inversoModular:
-    push    rbp
-    mov     rbp, rsp
+;   [rbp+24] = direccion donde guardar x
+;   [rbp+16] = direccion donde guardar mcd
+;
+; Variables locales:
+;   [rbp-8]  = valido
+;   [rbp-16] = y
+; -------------------------------------------------------------
+inversoModular PROC
+    push rbp
+    mov rbp, rsp
+    sub rsp, 16
 
-    ; TODO Julio: llamar a euclidesExtendido y escribir x y mcd
-    ;             en las direcciones recibidas.
+    ;validarDatos(a, p, &valido)
+    push QWORD PTR [rbp+40]
+    push QWORD PTR [rbp+32]
+    lea rax, [rbp-8]
+    push rax
+    call validarDatos
+    add rsp, 24
 
+    cmp QWORD PTR [rbp-8], 1
+    je inverso_calcular
+
+    ;si no es valido, x = 0 y mcd = 0
+    mov rax, QWORD PTR [rbp+24]
+    mov QWORD PTR [rax], 0
+
+    mov rax, QWORD PTR [rbp+16]
+    mov QWORD PTR [rax], 0
+
+    jmp inverso_fin
+
+inverso_calcular:
+    ;euclidesExtendido(a, p, &x, &y, &mcd)
+    push QWORD PTR [rbp+40]
+    push QWORD PTR [rbp+32]
+
+    mov rax, QWORD PTR [rbp+24]
+    push rax
+
+    lea rax, [rbp-16]
+    push rax
+
+    mov rax, QWORD PTR [rbp+16]
+    push rax
+
+    call euclidesExtendido
+    add rsp, 40
+
+inverso_fin:
     leave
     ret
+inversoModular ENDP
 
-
-; ============================================================
-; imprimirError: muestra "El numero no tiene inverso
-; multiplicativo modular". No recibe parametros.
-; (Necesita declarar su mensaje en la seccion .data y llamar a
-;  printf, igual que imprimirResultado; recordar 'and rsp,-16'.)
-; ============================================================
-imprimirError:
-    push    rbp
-    mov     rbp, rsp
-    and     rsp, -16
-
-    ; TODO Julio: imprimir el mensaje de error con printf.
-
-    leave
-    ret
+END
